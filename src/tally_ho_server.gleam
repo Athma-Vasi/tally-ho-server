@@ -1,5 +1,8 @@
+import gleam/dynamic/decode
 import gleam/io
+import server/server
+import sqlight
 
 pub fn main() -> Nil {
-  io.println("Hello from tally_ho_server!")
+  server.start()
 }
