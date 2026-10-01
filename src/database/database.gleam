@@ -2,7 +2,7 @@ import gleam/dynamic/decode
 import gleam/io
 import sqlight
 
-fn connect() {
+pub fn connect() -> Nil {
   let _conn_result =
     sqlight.with_connection(
       "file:./src/sqlite_db/testing.sqlite3",
