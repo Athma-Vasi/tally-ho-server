@@ -6,7 +6,6 @@ import wisp/wisp_mist
 
 pub fn start() {
   wisp.configure_logger()
-
   let secret_key_base = wisp.random_string(64)
 
   let assert Ok(_) =
