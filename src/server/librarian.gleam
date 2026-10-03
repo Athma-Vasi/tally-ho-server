@@ -1,5 +1,6 @@
 import gleam/dict
 import gleam/erlang/process
+import gleam/http/request
 import gleam/io
 import gleam/list
 import gleam/otp/actor
@@ -36,7 +37,7 @@ type LibrarianPoolSubject =
   process.Subject(LibrarianPoolMessage)
 
 type CallSlip =
-  wisp.Request
+  request.Request(wisp.Connection)
 
 type CallSlipsQueue =
   List(CallSlip)
@@ -140,11 +141,33 @@ pub fn new_pool(
     )
   let state = #(call_slips_queue, librarian_subjects, librarians_roster)
 
+  io.println("\n")
+  io.println("Starting new librarian pool: " <> string.inspect(name))
+  io.println("Initial librarians roster: " <> string.inspect(librarians_roster))
+  io.println("Call slips queue: " <> string.inspect(call_slips_queue))
+  io.println("Librarian pool state: " <> string.inspect(state))
+
   actor.new(state)
   |> actor.named(name)
   |> actor.on_message(handle_pool_message)
   |> actor.start()
 }
+
+pub fn receive_call_slip(
+  call_slip: CallSlip,
+  librarian_pool_subject: LibrarianPoolSubject,
+) {
+  io.println("\n")
+  io.println("Sending call slip: " <> string.inspect(call_slip))
+  io.println("To librarian pool: " <> string.inspect(librarian_pool_subject))
+
+  actor.send(
+    librarian_pool_subject,
+    ReceiveCallSlip(call_slip, librarian_pool_subject),
+  )
+}
+
+// ~~~~~ Librarian Actor ~~~~~
 
 pub opaque type LibrarianMessage {
   ReceiveCallSlipFromPool(
@@ -162,6 +185,9 @@ fn handle_librarian_message(state: List(Nil), message: LibrarianMessage) {
 }
 
 pub fn new_librarian(name: process.Name(LibrarianMessage)) {
+  io.println("\n")
+  io.println("Starting new librarian actor: " <> string.inspect(name))
+
   actor.new([])
   |> actor.named(name)
   |> actor.on_message(handle_librarian_message)

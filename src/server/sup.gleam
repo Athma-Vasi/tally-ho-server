@@ -1,7 +1,10 @@
 import gleam/erlang/process
+import gleam/io
 import gleam/list
 import gleam/otp/static_supervisor
 import gleam/otp/supervision
+import gleam/string
+import server/constants
 import server/librarian
 import wisp
 
@@ -10,12 +13,10 @@ fn generate_librarian_uuid() {
 }
 
 fn generate_librarian_names(
-  n: Int,
+  within limit: Int,
 ) -> List(process.Name(librarian.LibrarianMessage)) {
-  generate_librarian_uuid() |> process.new_name |> list.repeat(times: n)
+  generate_librarian_uuid() |> process.new_name |> list.repeat(times: limit)
 }
-
-const librarians_limit = 10
 
 fn generate_librarian_subjects(
   librarians_names: List(process.Name(librarian.LibrarianMessage)),
@@ -29,6 +30,11 @@ fn start_librarian_pool(
   librarian_names: List(process.Name(librarian.LibrarianMessage)),
 ) {
   fn() {
+    io.println("\n")
+    io.println(
+      "Starting new librarian pool: " <> string.inspect(librarian_pool_name),
+    )
+
     librarian.new_pool(
       librarian_pool_name,
       generate_librarian_subjects(librarian_names),
@@ -40,9 +46,15 @@ fn start_librarian(
   librarian_name: process.Name(librarian.LibrarianMessage),
   librarian_pool_name: process.Name(librarian.LibrarianPoolMessage),
 ) {
+  io.println("\n")
+  io.println("In Outer scope")
+
   fn() {
-    let librarian_subject = process.named_subject(librarian_name)
-    let librarian_pool_subject = process.named_subject(librarian_pool_name)
+    io.println("\n")
+    io.println("Starting new librarian: " <> string.inspect(librarian_name))
+
+    let _librarian_subject = process.named_subject(librarian_name)
+    let _librarian_pool_subject = process.named_subject(librarian_pool_name)
     let new_librarian = librarian.new_librarian(librarian_name)
 
     // librarian.librarian_restart(librarian_subject, librarian_pool_subject)
@@ -52,15 +64,23 @@ fn start_librarian(
 }
 
 fn start_librarians(
-  librarian_sup_builder: static_supervisor.Builder,
+  librarian_pool_supervisor_builder: static_supervisor.Builder,
   librarian_pool_name: process.Name(librarian.LibrarianPoolMessage),
   librarian_names: List(process.Name(librarian.LibrarianMessage)),
 ) -> static_supervisor.Builder {
+  io.println("\n")
+  io.println(
+    "Starting librarians for pool: " <> string.inspect(librarian_pool_name),
+  )
+
   librarian_names
   |> list.fold(
-    from: librarian_sup_builder,
-    with: fn(sup_builder, librarian_name) {
-      sup_builder
+    from: librarian_pool_supervisor_builder,
+    with: fn(pool_sup_builder, librarian_name) {
+      io.println("\n")
+      io.println("Starting librarian: " <> string.inspect(librarian_name))
+
+      pool_sup_builder
       |> static_supervisor.add(
         supervision.worker(start_librarian(librarian_name, librarian_pool_name)),
       )
@@ -71,18 +91,31 @@ fn start_librarians(
 pub fn start_librarian_pool_supervisor(
   librarian_pool_name: process.Name(librarian.LibrarianPoolMessage),
 ) -> supervision.ChildSpecification(static_supervisor.Supervisor) {
-  let librarian_names = generate_librarian_names(librarians_limit)
+  let librarian_names = generate_librarian_names(constants.librarians_limit)
 
-  let librarian_sup_builder =
-    static_supervisor.new(static_supervisor.OneForOne)
-    |> static_supervisor.add(
-      supervision.worker(start_librarian_pool(
-        librarian_pool_name,
-        librarian_names,
-      )),
-    )
+  io.println("\n")
+  io.println(
+    "Starting librarian pool supervisor for: "
+    <> string.inspect(librarian_pool_name),
+  )
 
-  start_librarians(librarian_sup_builder, librarian_pool_name, librarian_names)
+  static_supervisor.new(static_supervisor.OneForOne)
+  |> static_supervisor.add(
+    start_librarian_pool(librarian_pool_name, librarian_names)
+    |> supervision.worker,
+  )
+  |> start_librarians(librarian_pool_name, librarian_names)
   |> static_supervisor.restart_tolerance(intensity: 10, period: 1000)
   |> static_supervisor.supervised
 }
+// pub fn start_librarian_supervisor(
+//   librarian_pool_name: process.Name(librarian.LibrarianPoolMessage),
+// ) -> supervision.ChildSpecification(static_supervisor.Supervisor) {
+//   let librarian_pool_supervisor_spec =
+//     start_librarian_pool_supervisor(librarian_pool_name)
+
+//   static_supervisor.new(static_supervisor.OneForOne)
+//   |> static_supervisor.add(librarian_pool_supervisor_spec)
+//   |> static_supervisor.restart_tolerance(intensity: 10, period: 1000)
+//   |> static_supervisor.supervised()
+// }
